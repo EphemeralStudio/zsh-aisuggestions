@@ -7,7 +7,7 @@ import os
 import signal
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Optional
 
 from .cache import SuggestionCache
 from .config import load_config
@@ -36,7 +36,7 @@ def get_pid_path() -> str:
 class SidecarServer:
     """Async Unix domain socket server for handling suggestion requests."""
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.socket_path = get_socket_path()
         self.pid_path = get_pid_path()
@@ -51,8 +51,8 @@ class SidecarServer:
             max_tokens=config.get("max_tokens", 150),
             timeout=config.get("request_timeout_seconds", 5),
         )
-        self._current_task: asyncio.Task | None = None
-        self._server: asyncio.Server | None = None
+        self._current_task: Optional[asyncio.Task] = None
+        self._server: Optional[asyncio.Server] = None
         self._running = True
 
     async def handle_client(self, reader: asyncio.StreamReader,
@@ -72,7 +72,7 @@ class SidecarServer:
                 request = json.loads(request_text)
             except json.JSONDecodeError as e:
                 response = {"error": f"Invalid JSON: {e}"}
-                writer.write(json.dumps(response).encode("utf-8"))
+                writer.write(json.dumps(response, separators=(',', ':')).encode("utf-8"))
                 await writer.drain()
                 writer.close()
                 await writer.wait_closed()
@@ -84,7 +84,7 @@ class SidecarServer:
                 response = self._handle_health()
             elif req_type == "shutdown":
                 response = {"status": "shutting_down"}
-                writer.write(json.dumps(response).encode("utf-8"))
+                writer.write(json.dumps(response, separators=(',', ':')).encode("utf-8"))
                 await writer.drain()
                 writer.close()
                 await writer.wait_closed()
@@ -96,7 +96,7 @@ class SidecarServer:
             else:
                 response = {"error": f"Unknown request type: {req_type}"}
 
-            writer.write(json.dumps(response).encode("utf-8"))
+            writer.write(json.dumps(response, separators=(',', ':')).encode("utf-8"))
             await writer.drain()
 
         except asyncio.TimeoutError:
@@ -251,7 +251,7 @@ class SidecarServer:
             logger.info("zsh-aisuggestions sidecar stopped")
 
 
-def run_server(config_path: str | None = None) -> None:
+def run_server(config_path: Optional[str] = None) -> None:
     """Entry point to start the sidecar server."""
     config = load_config(config_path)
 

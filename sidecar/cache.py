@@ -3,7 +3,7 @@
 import hashlib
 import time
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Optional
 
 
 class SuggestionCache:
@@ -21,7 +21,7 @@ class SuggestionCache:
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
     def get(self, buffer: str, cwd: str = "", last_exit_code: int = 0,
-            git_branch: str = "") -> str | None:
+            git_branch: str = "") -> Optional[str]:
         """Look up a cached suggestion. Returns None on miss or expiry."""
         key = self._make_key(buffer, cwd, last_exit_code, git_branch)
         if key not in self._cache:

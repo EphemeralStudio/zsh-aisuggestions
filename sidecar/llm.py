@@ -3,7 +3,7 @@
 import json
 import logging
 import asyncio
-from typing import Any
+from typing import Any, Dict, List
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
@@ -44,14 +44,14 @@ class LLMProvider:
         self.max_tokens = max_tokens
         self.timeout = timeout
 
-    def _build_messages(self, user_prompt: str) -> list[dict[str, str]]:
+    def _build_messages(self, user_prompt: str) -> List[Dict[str, str]]:
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ]
 
     async def complete(self, user_prompt: str) -> str:
-        """Send a completion request and return the suggestion string."""
+        """Send a streaming completion request and return the suggestion string."""
         messages = self._build_messages(user_prompt)
         url = f"{self.base_url}/chat/completions"
         payload = {
@@ -60,7 +60,7 @@ class LLMProvider:
             "max_tokens": self.max_tokens,
             "temperature": 0.3,
             "n": 1,
-            "stream": False,
+            "stream": True,
         }
 
         headers = {
@@ -71,11 +71,11 @@ class LLMProvider:
 
         data = json.dumps(payload).encode("utf-8")
 
-        # Run blocking HTTP call in thread pool to keep asyncio responsive
+        # Run streaming HTTP call in thread pool
         loop = asyncio.get_event_loop()
         try:
-            response_text = await asyncio.wait_for(
-                loop.run_in_executor(None, self._sync_request, url, data, headers),
+            suggestion = await asyncio.wait_for(
+                loop.run_in_executor(None, self._sync_stream_request, url, data, headers),
                 timeout=self.timeout,
             )
         except asyncio.TimeoutError:
@@ -85,31 +85,43 @@ class LLMProvider:
             logger.debug("LLM API request was cancelled")
             return ""
 
-        if not response_text:
+        if not suggestion:
             return ""
 
-        try:
-            resp = json.loads(response_text)
-            choices = resp.get("choices", [])
-            if choices:
-                content = choices[0].get("message", {}).get("content", "")
-                # Clean up: strip whitespace, backticks, quotes
-                suggestion = content.strip().strip("`").strip('"').strip("'")
-                # Only return single-line suggestions
-                if "\n" in suggestion:
-                    suggestion = suggestion.split("\n")[0].strip()
-                return suggestion
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            logger.warning("Failed to parse LLM response: %s", e)
+        # Clean up: strip whitespace, backticks, quotes
+        suggestion = suggestion.strip().strip("`").strip('"').strip("'")
+        # Only return single-line suggestions
+        if "\n" in suggestion:
+            suggestion = suggestion.split("\n")[0].strip()
+        return suggestion
 
-        return ""
-
-    def _sync_request(self, url: str, data: bytes, headers: dict) -> str:
-        """Perform a synchronous HTTP request (called from thread pool)."""
+    def _sync_stream_request(self, url: str, data: bytes, headers: dict) -> str:
+        """Perform a streaming HTTP request, collecting tokens (called from thread pool)."""
         try:
             req = Request(url, data=data, headers=headers, method="POST")
             with urlopen(req, timeout=self.timeout) as resp:
-                return resp.read().decode("utf-8")
+                collected = []
+                buffer = b""
+                for chunk in iter(lambda: resp.read(1024), b""):
+                    buffer += chunk
+                    # Process complete SSE lines
+                    while b"\n" in buffer:
+                        line, buffer = buffer.split(b"\n", 1)
+                        line = line.strip()
+                        if not line or line == b"data: [DONE]":
+                            continue
+                        if line.startswith(b"data: "):
+                            try:
+                                event = json.loads(line[6:])
+                                choices = event.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        collected.append(content)
+                            except json.JSONDecodeError:
+                                continue
+                return "".join(collected)
         except HTTPError as e:
             body = ""
             try:
@@ -117,7 +129,8 @@ class LLMProvider:
             except Exception:
                 pass
             logger.warning("LLM API HTTP error %d: %s", e.code, body)
-            return ""
+            # Fall back to non-streaming on error
+            return self._sync_request_fallback(url, data, headers)
         except URLError as e:
             logger.warning("LLM API connection error: %s", e.reason)
             return ""
@@ -125,8 +138,26 @@ class LLMProvider:
             logger.warning("LLM API request failed: %s", e)
             return ""
 
+    def _sync_request_fallback(self, url: str, data: bytes, headers: dict) -> str:
+        """Non-streaming fallback for providers that don't support streaming."""
+        try:
+            # Rebuild payload with stream=False
+            payload = json.loads(data)
+            payload["stream"] = False
+            data = json.dumps(payload).encode("utf-8")
+            req = Request(url, data=data, headers=headers, method="POST")
+            with urlopen(req, timeout=self.timeout) as resp:
+                response_text = resp.read().decode("utf-8")
+            resp_json = json.loads(response_text)
+            choices = resp_json.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+        except Exception as e:
+            logger.warning("LLM fallback request failed: %s", e)
+        return ""
 
-def build_user_prompt(request_data: dict[str, Any]) -> str:
+
+def build_user_prompt(request_data: Dict[str, Any]) -> str:
     """Build the user prompt from the request data and context."""
     buffer = request_data.get("buffer", "")
     cursor_pos = request_data.get("cursor_position", len(buffer))
