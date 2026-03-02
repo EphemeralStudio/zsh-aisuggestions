@@ -9,7 +9,7 @@ from urllib.error import URLError, HTTPError
 
 logger = logging.getLogger("zsh-aisuggestions")
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT_REWRITE = """\
 You are a terminal command suggestion engine. The user is typing in their terminal \
 and pressing a hotkey to ask for your best command suggestion. Determine which mode \
 applies and respond accordingly:
@@ -30,17 +30,30 @@ Rules:
 - Return ONLY the full suggested command. No explanation, no commentary, no markdown.
 - Return exactly one line. No newlines.
 - Satisfy the user's COMPLETE intent. Read the whole input before deciding what to suggest.
-- Pay attention to the cursor position. The cursor indicates where the user is actively \
-editing. If the user is typing a flag or argument in the middle of an existing command, \
-complete the token at the cursor while preserving the rest of the command. For example, \
-if the input is "git --clone https://...repo.git" with cursor right after "--", \
-suggest "git --recursive clone https://...repo.git" (completing the flag at the cursor).
 - Use context (cwd, project type, last error, exit code, git state) to infer intent.
 - If the last command failed (non-zero exit code), consider suggesting a fix or retry.
 - Prefer safe commands. Never suggest destructive commands (rm -rf /, DROP DATABASE, etc.) \
 unless the user's input clearly signals that intent.
 - If the input is ambiguous, prefer the most common usage.
 - The suggested command should be immediately executable — no placeholders like <file>.
+- NEVER fabricate URLs, repository paths, or owner/org names you are not certain about."""
+
+SYSTEM_PROMPT_COMPLETE = """\
+You are a terminal inline-completion engine. The user has an existing command in their \
+terminal with the cursor at a specific position (marked with ▌). Your job is to complete \
+the token or argument at the cursor position while PRESERVING all existing text before \
+and after the cursor.
+
+Rules:
+- Return the FULL command line with your completion inserted at the cursor position.
+- Keep ALL text before the cursor exactly as-is.
+- Keep ALL text after the cursor exactly as-is.
+- Only insert new text at the cursor position to complete the current token/flag/argument.
+- Return exactly one line. No explanation, no commentary, no markdown, no newlines.
+- The result must be immediately executable — no placeholders.
+- If the cursor is after a partial flag like "--", complete it to a valid flag (e.g. "--recursive").
+- If the cursor is after a partial command/path, complete it appropriately.
+- If there is nothing useful to insert, return the input unchanged (without the cursor marker).
 - NEVER fabricate URLs, repository paths, or owner/org names you are not certain about."""
 
 
@@ -59,15 +72,17 @@ class LLMProvider:
         self.max_tokens = max_tokens
         self.timeout = timeout
 
-    def _build_messages(self, user_prompt: str) -> List[Dict[str, str]]:
+    def _build_messages(self, user_prompt: str,
+                        system_prompt: str = SYSTEM_PROMPT_REWRITE) -> List[Dict[str, str]]:
         return [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-    async def complete(self, user_prompt: str) -> str:
+    async def complete(self, user_prompt: str,
+                       system_prompt: str = SYSTEM_PROMPT_REWRITE) -> str:
         """Send a streaming completion request and return the suggestion string."""
-        messages = self._build_messages(user_prompt)
+        messages = self._build_messages(user_prompt, system_prompt)
         url = f"{self.base_url}/chat/completions"
         payload = {
             "model": self.model,
@@ -200,6 +215,7 @@ def build_user_prompt(request_data: Dict[str, Any]) -> str:
     """Build the user prompt from the request data and context."""
     buffer = request_data.get("buffer", "")
     cursor_pos = request_data.get("cursor_position", len(buffer))
+    trigger_mode = request_data.get("trigger_mode", "rewrite")
     context = request_data.get("context", {})
 
     parts = []
@@ -238,8 +254,8 @@ def build_user_prompt(request_data: Dict[str, Any]) -> str:
         history_str = "\n".join(f"  {cmd}" for cmd in recent_history[-10:])
         parts.append(f"Recent commands:\n{history_str}")
 
-    # Current input — tag whether it looks like natural language
-    if _looks_like_natural_language(buffer):
+    # Current input
+    if trigger_mode == "rewrite" and _looks_like_natural_language(buffer):
         parts.append(f"\nUser request (natural language — TRANSLATE to a command): {buffer}")
     else:
         # Show cursor position visually so the LLM knows where the user is editing

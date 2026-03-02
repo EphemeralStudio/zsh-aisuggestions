@@ -2,26 +2,22 @@
 # zsh-aisuggestions.plugin.zsh — LLM-powered autosuggestions for Zsh
 #
 # Usage:
-#   Ctrl+G   → trigger AI suggestion (shown as ghost text)
-#   → / Tab  → accept the suggestion
-#   Ctrl+→   → accept next word
-#   Ctrl+C   → dismiss and restore original input
-#   any key  → dismiss, restore, continue typing
+#   Ctrl+G       → trigger AI rewrite (full command replacement in ghost color)
+#   Ctrl+]       → trigger AI autocomplete (inline ghost text at cursor)
+#   Tab / →      → accept the suggestion
+#   Backspace    → dismiss and restore original input
 
 # ─── Guard ────────────────────────────────────────────────────────────────────
 # On exec zsh / source reload: tear down the old sidecar so we start fresh
 # with a newly-read config.  The guard only prevents double-sourcing within
 # the *same* shell session (e.g. two plugins try to source us).
 if [[ -n "$_AISUG_LOADED" ]]; then
-    # Already loaded in this shell instance — kill old sidecar so the
-    # rest of the file can restart it with a fresh config.
     if [[ -f "$_AISUG_PIDFILE" ]]; then
         local _old_pid=$(< "$_AISUG_PIDFILE")
         [[ -n "$_old_pid" ]] && kill "$_old_pid" 2>/dev/null
         rm -f "$_AISUG_PIDFILE" "$_AISUG_SOCKET" 2>/dev/null
         sleep 0.1
     fi
-    # Reset failure flag so the new attempt can succeed
     _AISUG_SIDECAR_FAILED=0
     _AISUG_SIDECAR_CHECKED=0
 fi
@@ -35,11 +31,14 @@ typeset -g _AISUG_TMPDIR="${TMPDIR:-/tmp}/zsh-aisuggestions-${UID}"
 typeset -g _AISUG_GHOST_COLOR="${AISUG_GHOST_COLOR:-8}"
 
 # ─── State ────────────────────────────────────────────────────────────────────
-typeset -g _AISUG_SUGGESTION=""
-typeset -g _AISUG_MODE=""
-typeset -g _AISUG_ORIGINAL_BUFFER=""
-typeset -g _AISUG_ORIGINAL_CURSOR=0
-typeset -g _AISUG_ACTIVE=0
+typeset -g _AISUG_SUGGESTION=""        # Full suggested command
+typeset -g _AISUG_MODE=""              # "rewrite" or "complete"
+typeset -g _AISUG_TRIGGER_MODE=""      # Which hotkey triggered: "rewrite" or "complete"
+typeset -g _AISUG_ORIGINAL_BUFFER=""   # Buffer before suggestion was shown
+typeset -g _AISUG_ORIGINAL_CURSOR=0    # Cursor before suggestion was shown
+typeset -g _AISUG_ACTIVE=0            # 1 when a suggestion is being displayed
+typeset -g _AISUG_GHOST_START=0       # Start position of ghost text in BUFFER (complete mode)
+typeset -g _AISUG_GHOST_LEN=0         # Length of ghost text inserted in BUFFER (complete mode)
 typeset -g _AISUG_LAST_EXIT_CODE=0
 typeset -g _AISUG_LAST_COMMAND=""
 typeset -g _AISUG_SIDECAR_FAILED=0
@@ -66,23 +65,19 @@ _aisug_start_sidecar() {
     (( _AISUG_SIDECAR_FAILED )) && return 1
     _aisug_sidecar_running && return 0
 
-    # Prefer the plugin venv, then Homebrew, then generic python3/python
     local python_cmd=""
     local venv_python="${HOME}/.local/share/zsh-aisuggestions/venv/bin/python"
     if [[ -x "$venv_python" ]]; then
         python_cmd="$venv_python"
     else
         local candidates=()
-        # Homebrew paths (Apple Silicon and Intel)
         candidates+=(/opt/homebrew/bin/python3 /usr/local/bin/python3)
-        # Generic PATH lookup
         for cmd in python3 python; do
             local p
             p=$(command -v "$cmd" 2>/dev/null) && candidates+=("$p")
         done
         for cmd in "${candidates[@]}"; do
             [[ -x "$cmd" ]] || continue
-            # Accept Python >= 3.8
             "$cmd" -c 'import sys; sys.exit(0 if sys.version_info >= (3,8) else 1)' 2>/dev/null \
                 && { python_cmd="$cmd"; break; }
         done
@@ -158,43 +153,92 @@ _aisug_update_context_cache() {
 }
 
 _aisug_build_request() {
-    local buffer="$1" cursor="$2"
+    local buffer="$1" cursor="$2" trigger_mode="$3"
     local eb="${buffer//\\/\\\\}"; eb="${eb//\"/\\\"}"
     local ec="${_AISUG_CTX_CWD//\\/\\\\}"; ec="${ec//\"/\\\"}"
     local el="${_AISUG_LAST_COMMAND//\\/\\\\}"; el="${el//\"/\\\"}"
-    echo -n "{\"type\":\"suggest\",\"buffer\":\"${eb}\",\"cursor_position\":${cursor},\"context\":{\"cwd\":\"${ec}\",\"git_branch\":\"${_AISUG_CTX_GIT_BRANCH}\",\"git_dirty\":${_AISUG_CTX_GIT_DIRTY},\"last_exit_code\":${_AISUG_LAST_EXIT_CODE},\"last_command\":\"${el}\",\"shell\":\"zsh\",\"os\":\"${_AISUG_CTX_OS}\",\"recent_history\":${_AISUG_CTX_HISTORY}}}"
+    echo -n "{\"type\":\"suggest\",\"trigger_mode\":\"${trigger_mode}\",\"buffer\":\"${eb}\",\"cursor_position\":${cursor},\"context\":{\"cwd\":\"${ec}\",\"git_branch\":\"${_AISUG_CTX_GIT_BRANCH}\",\"git_dirty\":${_AISUG_CTX_GIT_DIRTY},\"last_exit_code\":${_AISUG_LAST_EXIT_CODE},\"last_command\":\"${el}\",\"shell\":\"zsh\",\"os\":\"${_AISUG_CTX_OS}\",\"recent_history\":${_AISUG_CTX_HISTORY}}}"
 }
 
 # ─── State Management ─────────────────────────────────────────────────────────
 
 _aisug_reset_state() {
-    _AISUG_SUGGESTION=""; _AISUG_MODE=""
-    _AISUG_ORIGINAL_BUFFER=""; _AISUG_ORIGINAL_CURSOR=0; _AISUG_ACTIVE=0
+    _AISUG_SUGGESTION=""; _AISUG_MODE=""; _AISUG_TRIGGER_MODE=""
+    _AISUG_ORIGINAL_BUFFER=""; _AISUG_ORIGINAL_CURSOR=0
+    _AISUG_ACTIVE=0; _AISUG_GHOST_START=0; _AISUG_GHOST_LEN=0
 }
 
 # ─── ZLE Helpers ──────────────────────────────────────────────────────────────
 
 _aisug_zle_clear_ghost() { POSTDISPLAY=""; region_highlight=(); }
 
+# Show the suggestion as ghost text.
+# In rewrite mode: replace BUFFER entirely, highlight all in ghost color.
+# In complete mode: insert ghost text at cursor position inside BUFFER,
+#   highlight only the inserted portion so surrounding text looks normal.
 _aisug_zle_show_ghost() {
-    local suggestion="$1"
+    local suggestion="$1" trigger_mode="$2"
     [[ -z "$suggestion" ]] && { _aisug_zle_clear_ghost; return; }
     _AISUG_SUGGESTION="$suggestion"
 
-    # Decide mode client-side: if the suggestion starts with the current
-    # BUFFER it is a completion (show suffix as ghost text); otherwise it
-    # is a rewrite (replace BUFFER entirely, show in ghost colour).
-    if [[ "$suggestion" == "$BUFFER"* && "$suggestion" != "$BUFFER" ]]; then
-        _AISUG_MODE="complete"
-        local suffix="${suggestion#$BUFFER}"
-        POSTDISPLAY="${suffix}"
-        region_highlight=("$(( ${#BUFFER} )) $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=${_AISUG_GHOST_COLOR}")
+    if [[ "$trigger_mode" == "complete" ]]; then
+        # ── Complete mode: insert ghost text at cursor ────────────────────
+        # Compute what the LLM inserted by matching prefix (before cursor)
+        # and suffix (after cursor) against the suggestion.
+        local prefix="${_AISUG_ORIGINAL_BUFFER:0:$_AISUG_ORIGINAL_CURSOR}"
+        local suffix="${_AISUG_ORIGINAL_BUFFER:$_AISUG_ORIGINAL_CURSOR}"
+
+        # Find the insertion: suggestion = prefix + insertion + suffix
+        # First verify suggestion starts with prefix
+        local insertion=""
+        if [[ "$suggestion" == "${prefix}"* ]]; then
+            local after_prefix="${suggestion#$prefix}"
+            if [[ -n "$suffix" && "$after_prefix" == *"${suffix}" ]]; then
+                insertion="${after_prefix%$suffix}"
+            else
+                # Suffix not found — the LLM changed the tail too.
+                # Treat everything after prefix as the insertion,
+                # but only show the part that differs from suffix.
+                insertion="$after_prefix"
+                suffix=""
+            fi
+        fi
+
+        if [[ -n "$insertion" ]]; then
+            _AISUG_MODE="complete"
+            _AISUG_GHOST_START=${#prefix}
+            _AISUG_GHOST_LEN=${#insertion}
+            # Insert ghost text into BUFFER at cursor
+            BUFFER="${prefix}${insertion}${suffix}"
+            CURSOR=$(( ${#prefix} + ${#insertion} ))
+            POSTDISPLAY=""
+            # Highlight only the inserted portion
+            local ghost_end=$(( _AISUG_GHOST_START + _AISUG_GHOST_LEN ))
+            region_highlight=("${_AISUG_GHOST_START} ${ghost_end} fg=${_AISUG_GHOST_COLOR}")
+        else
+            # No insertion computed — nothing to show
+            _aisug_zle_clear_ghost
+            _AISUG_ACTIVE=0
+            return
+        fi
     else
-        _AISUG_MODE="rewrite"
-        BUFFER="$suggestion"
-        CURSOR=${#BUFFER}
-        POSTDISPLAY=""
-        region_highlight=("0 ${#BUFFER} fg=${_AISUG_GHOST_COLOR}")
+        # ── Rewrite mode ──────────────────────────────────────────────────
+        if [[ "$suggestion" == "$BUFFER"* && "$suggestion" != "$BUFFER" ]]; then
+            # Suggestion extends the buffer — show suffix as ghost POSTDISPLAY
+            _AISUG_MODE="rewrite"
+            _AISUG_GHOST_START=0; _AISUG_GHOST_LEN=0
+            local suf="${suggestion#$BUFFER}"
+            POSTDISPLAY="${suf}"
+            region_highlight=("$(( ${#BUFFER} )) $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=${_AISUG_GHOST_COLOR}")
+        else
+            # Full replacement — show entire line in ghost color
+            _AISUG_MODE="rewrite"
+            _AISUG_GHOST_START=0; _AISUG_GHOST_LEN=0
+            BUFFER="$suggestion"
+            CURSOR=${#BUFFER}
+            POSTDISPLAY=""
+            region_highlight=("0 ${#BUFFER} fg=${_AISUG_GHOST_COLOR}")
+        fi
     fi
 }
 
@@ -209,12 +253,9 @@ _aisug_zle_restore_and_clear() {
 }
 
 # ─── Core: Synchronous Query with Loading Indicator ──────────────────────────
-# The query blocks for 1-3s (LLM API time). We show "thinking..." first
-# via zle -R, then do the query, then show the result. All in ZLE context.
-# This is simple, reliable, and avoids all async signal/fd complexity.
 
 _aisug_do_query() {
-    local buffer="$1" cursor="$2"
+    local buffer="$1" cursor="$2" trigger_mode="$3"
 
     # Show loading indicator and flush display
     POSTDISPLAY="  ... thinking"
@@ -222,11 +263,11 @@ _aisug_do_query() {
     zle -R
 
     # Build request and query sidecar (this blocks for LLM response time)
-    local request=$(_aisug_build_request "$buffer" "$cursor")
+    local request=$(_aisug_build_request "$buffer" "$cursor" "$trigger_mode")
     local response=$(_aisug_query_socket "$request")
 
-    # Parse response
-    local suggestion="" mode="complete" tmp
+    # Parse response — extract "suggestion" value
+    local suggestion="" tmp
     if [[ -n "$response" && "$response" == *'"suggestion"'* ]]; then
         tmp="${response#*\"suggestion\"}"
         tmp="${tmp#*\"}"
@@ -234,15 +275,10 @@ _aisug_do_query() {
         suggestion="${suggestion//\\\\/\\}"
         suggestion="${suggestion//\\\"/\"}"
     fi
-    if [[ -n "$response" && "$response" == *'"mode"'* ]]; then
-        tmp="${response#*\"mode\"}"
-        tmp="${tmp#*\"}"
-        mode="${tmp%%\"*}"
-    fi
 
-    # Show result (still in ZLE context — POSTDISPLAY is writable)
+    # Show result (still in ZLE context)
     if [[ -n "$suggestion" ]]; then
-        _aisug_zle_show_ghost "$suggestion"
+        _aisug_zle_show_ghost "$suggestion" "$trigger_mode"
     else
         _aisug_zle_clear_ghost
         _AISUG_ACTIVE=0
@@ -252,7 +288,8 @@ _aisug_do_query() {
 
 # ─── ZLE Widgets ──────────────────────────────────────────────────────────────
 
-_aisug_trigger() {
+# Ctrl+G — Rewrite mode: full command replacement
+_aisug_trigger_rewrite() {
     local buffer="$BUFFER" cursor="$CURSOR"
     [[ -z "$buffer" ]] && { zle -M "zsh-aisuggestions: type something first"; return; }
 
@@ -260,16 +297,38 @@ _aisug_trigger() {
     (( _AISUG_SIDECAR_FAILED )) && { zle -M "zsh-aisuggestions: sidecar not available"; return; }
 
     _AISUG_ACTIVE=1
+    _AISUG_TRIGGER_MODE="rewrite"
     _AISUG_ORIGINAL_BUFFER="$BUFFER"
     _AISUG_ORIGINAL_CURSOR="$CURSOR"
 
-    _aisug_do_query "$buffer" "$cursor"
+    _aisug_do_query "$buffer" "$cursor" "rewrite"
 }
-zle -N _aisug_trigger
+zle -N _aisug_trigger_rewrite
+
+# Ctrl+] — Complete mode: inline completion at cursor
+_aisug_trigger_complete() {
+    local buffer="$BUFFER" cursor="$CURSOR"
+    [[ -z "$buffer" ]] && { zle -M "zsh-aisuggestions: type something first"; return; }
+
+    _aisug_ensure_sidecar
+    (( _AISUG_SIDECAR_FAILED )) && { zle -M "zsh-aisuggestions: sidecar not available"; return; }
+
+    _AISUG_ACTIVE=1
+    _AISUG_TRIGGER_MODE="complete"
+    _AISUG_ORIGINAL_BUFFER="$BUFFER"
+    _AISUG_ORIGINAL_CURSOR="$CURSOR"
+
+    _aisug_do_query "$buffer" "$cursor" "complete"
+}
+zle -N _aisug_trigger_complete
 
 _aisug_accept() {
     if [[ -n "$_AISUG_SUGGESTION" ]] && (( _AISUG_ACTIVE )); then
-        BUFFER="$_AISUG_SUGGESTION"; CURSOR=${#BUFFER}
+        # In both modes the buffer already contains the suggestion text
+        # (rewrite: full replacement; complete: insertion at cursor).
+        # Just clear ghost highlighting and accept.
+        BUFFER="$_AISUG_SUGGESTION"
+        CURSOR=${#BUFFER}
         _aisug_zle_clear_ghost; _aisug_reset_state
     else
         zle forward-char
@@ -277,36 +336,11 @@ _aisug_accept() {
 }
 zle -N _aisug_accept
 
-_aisug_accept_word() {
-    if [[ -n "$_AISUG_SUGGESTION" ]] && (( _AISUG_ACTIVE )); then
-        local suggestion="$_AISUG_SUGGESTION"
-        if [[ "$suggestion" == "$BUFFER"* ]]; then
-            local remaining="${suggestion#$BUFFER}" next_chunk
-            if [[ "$remaining" == " "* ]]; then
-                next_chunk=" ${${remaining# }%% *}"
-            else
-                next_chunk="${remaining%% *}"
-            fi
-            [[ "${BUFFER}${next_chunk}" == "$suggestion" ]] && next_chunk="$remaining"
-            BUFFER="${BUFFER}${next_chunk}"
-        else
-            BUFFER="${suggestion%% *}"; _AISUG_MODE="complete"
-        fi
-        CURSOR=${#BUFFER}
-        [[ "$BUFFER" == "$suggestion" ]] \
-            && { _aisug_zle_clear_ghost; _aisug_reset_state; } \
-            || { _aisug_zle_show_ghost "$suggestion"; zle -R; }
-    else
-        zle forward-word
-    fi
-}
-zle -N _aisug_accept_word
-
 _aisug_dismiss() {
     if (( _AISUG_ACTIVE )); then
-        _aisug_zle_restore_and_clear; zle -R
+        _aisug_zle_restore_and_clear
     else
-        zle send-break
+        zle .backward-delete-char
     fi
 }
 zle -N _aisug_dismiss
@@ -320,40 +354,13 @@ _aisug_tab() {
 }
 zle -N _aisug_tab
 
-# ─── Auto-Dismiss on Typing ──────────────────────────────────────────────────
-
-_aisug_self_insert_wrapper() {
-    (( _AISUG_ACTIVE )) && _aisug_zle_restore_and_clear
-    zle .self-insert
-}
-zle -N self-insert _aisug_self_insert_wrapper
-
-_aisug_backward_delete_wrapper() {
-    (( _AISUG_ACTIVE )) && _aisug_zle_restore_and_clear
-    zle .backward-delete-char
-}
-zle -N backward-delete-char _aisug_backward_delete_wrapper
-
-_aisug_kill_line_wrapper() {
-    (( _AISUG_ACTIVE )) && _aisug_zle_restore_and_clear
-    zle .kill-whole-line
-}
-zle -N kill-whole-line _aisug_kill_line_wrapper
-
-_aisug_backward_kill_word_wrapper() {
-    (( _AISUG_ACTIVE )) && _aisug_zle_restore_and_clear
-    zle .backward-kill-word
-}
-zle -N backward-kill-word _aisug_backward_kill_word_wrapper
-
 # ─── Keybindings ──────────────────────────────────────────────────────────────
 
-bindkey '^G' _aisug_trigger
-bindkey '^C' _aisug_dismiss
-bindkey '^[[C' _aisug_accept          # Right Arrow
-bindkey '^[[F' _aisug_accept          # End
-bindkey '^[[1;5C' _aisug_accept_word  # Ctrl+Right
-bindkey '\t' _aisug_tab
+bindkey '^G' _aisug_trigger_rewrite        # Ctrl+G — rewrite/translate
+bindkey '^]' _aisug_trigger_complete       # Ctrl+] — inline autocomplete
+bindkey '^[[C' _aisug_accept               # Right Arrow
+bindkey '\t' _aisug_tab                    # Tab
+bindkey '^?' _aisug_dismiss                # Backspace — dismiss or normal delete
 
 # ─── Lifecycle Hooks ──────────────────────────────────────────────────────────
 
@@ -373,8 +380,6 @@ add-zsh-hook precmd _aisug_precmd
 add-zsh-hook preexec _aisug_preexec
 
 # ─── Startup ──────────────────────────────────────────────────────────────────
-# Kill any previous sidecar (by PID file, then by process scan) so we always
-# start fresh with the latest config.yaml.
 if [[ -f "$_AISUG_PIDFILE" ]]; then
     local _old_pid=$(< "$_AISUG_PIDFILE")
     if [[ -n "$_old_pid" ]] && kill -0 "$_old_pid" 2>/dev/null; then
@@ -382,8 +387,6 @@ if [[ -f "$_AISUG_PIDFILE" ]]; then
     fi
     rm -f "$_AISUG_PIDFILE" "$_AISUG_SOCKET" 2>/dev/null
 fi
-# Also kill any orphaned sidecar processes (e.g. stale PID file was deleted
-# but the process survived a previous exec zsh).
 local _orphan_pids
 _orphan_pids=($(command pgrep -f "python.*-m sidecar" 2>/dev/null))
 for _p in "${_orphan_pids[@]}"; do

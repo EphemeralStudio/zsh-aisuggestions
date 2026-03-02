@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 from .cache import SuggestionCache
 from .config import load_config
 from .context import enrich_context, try_resolve_git_clone
-from .llm import LLMProvider, build_user_prompt
+from .llm import LLMProvider, build_user_prompt, SYSTEM_PROMPT_REWRITE, SYSTEM_PROMPT_COMPLETE
 
 logger = logging.getLogger("zsh-aisuggestions")
 
@@ -124,6 +124,7 @@ class SidecarServer:
     async def _handle_suggest(self, request: dict) -> dict:
         """Handle suggestion request with debounce and caching."""
         buffer = request.get("buffer", "").strip()
+        trigger_mode = request.get("trigger_mode", "rewrite")
 
         if not buffer or len(buffer) < 2:
             return {"suggestion": "", "source": "none", "cached": False}
@@ -140,21 +141,22 @@ class SidecarServer:
         context = request.get("context", {})
         context = enrich_context(context)
 
-        # Short-circuit: resolve "git clone <name>" to a real URL
-        resolved_clone = await asyncio.get_event_loop().run_in_executor(
-            None, try_resolve_git_clone, buffer, 3.0
-        )
-        if resolved_clone:
-            logger.debug("Resolved git clone: %s -> %s", buffer, resolved_clone)
-            self.cache.put(buffer, resolved_clone, cwd=context.get("cwd", ""),
-                           last_exit_code=context.get("last_exit_code", 0),
-                           git_branch=context.get("git_branch", ""))
-            return {
-                "suggestion": resolved_clone,
-                "mode": "rewrite",
-                "source": "github",
-                "cached": False,
-            }
+        # Short-circuit: resolve "git clone <name>" to a real URL (rewrite mode only)
+        if trigger_mode == "rewrite":
+            resolved_clone = await asyncio.get_event_loop().run_in_executor(
+                None, try_resolve_git_clone, buffer, 3.0
+            )
+            if resolved_clone:
+                logger.debug("Resolved git clone: %s -> %s", buffer, resolved_clone)
+                self.cache.put(buffer, resolved_clone, cwd=context.get("cwd", ""),
+                               last_exit_code=context.get("last_exit_code", 0),
+                               git_branch=context.get("git_branch", ""))
+                return {
+                    "suggestion": resolved_clone,
+                    "mode": "rewrite",
+                    "source": "github",
+                    "cached": False,
+                }
 
         # Check cache
         cwd = context.get("cwd", "")
@@ -177,10 +179,15 @@ class SidecarServer:
             return {"suggestion": "", "source": "none", "cached": False,
                     "error": "No API key configured"}
 
+        # Select system prompt based on trigger mode
+        system_prompt = SYSTEM_PROMPT_COMPLETE if trigger_mode == "complete" else SYSTEM_PROMPT_REWRITE
+
         # Make LLM request
         user_prompt = build_user_prompt(request)
         try:
-            self._current_task = asyncio.create_task(self.llm.complete(user_prompt))
+            self._current_task = asyncio.create_task(
+                self.llm.complete(user_prompt, system_prompt)
+            )
             suggestion = await self._current_task
         except asyncio.CancelledError:
             return {"suggestion": "", "source": "cancelled", "cached": False}
