@@ -118,8 +118,13 @@ class LLMProvider:
         if not suggestion:
             return ""
 
-        # Clean up: strip whitespace, backticks, quotes
-        suggestion = suggestion.strip().strip("`").strip('"').strip("'")
+        # Clean up: strip whitespace
+        suggestion = suggestion.strip()
+        # Strip wrapping backticks (common LLM artifact: ```command``` or `command`)
+        # Only strip if they form a matching pair — don't strip quotes since
+        # they are valid shell characters needed in complete mode.
+        while suggestion.startswith("`") and suggestion.endswith("`") and len(suggestion) > 1:
+            suggestion = suggestion[1:-1].strip()
         # Only return single-line suggestions
         if "\n" in suggestion:
             suggestion = suggestion.split("\n")[0].strip()
