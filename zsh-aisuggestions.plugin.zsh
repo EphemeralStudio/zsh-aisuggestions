@@ -177,23 +177,35 @@ _aisug_reset_state() {
 _aisug_zle_clear_ghost() { POSTDISPLAY=""; region_highlight=(); }
 
 _aisug_zle_show_ghost() {
-    local suggestion="$1" mode="$2"
+    local suggestion="$1"
     [[ -z "$suggestion" ]] && { _aisug_zle_clear_ghost; return; }
-    _AISUG_SUGGESTION="$suggestion"; _AISUG_MODE="$mode"
-    if [[ "$mode" == "complete" ]]; then
+    _AISUG_SUGGESTION="$suggestion"
+
+    # Decide mode client-side: if the suggestion starts with the current
+    # BUFFER it is a completion (show suffix as ghost text); otherwise it
+    # is a rewrite (replace BUFFER entirely, show in ghost colour).
+    if [[ "$suggestion" == "$BUFFER"* && "$suggestion" != "$BUFFER" ]]; then
+        _AISUG_MODE="complete"
         local suffix="${suggestion#$BUFFER}"
-        [[ -n "$suffix" ]] && POSTDISPLAY="${suffix}" || POSTDISPLAY=""
+        POSTDISPLAY="${suffix}"
+        region_highlight=("$(( ${#BUFFER} )) $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=${_AISUG_GHOST_COLOR}")
     else
-        POSTDISPLAY="  [AI: ${suggestion}]"
+        _AISUG_MODE="rewrite"
+        BUFFER="$suggestion"
+        CURSOR=${#BUFFER}
+        POSTDISPLAY=""
+        region_highlight=("0 ${#BUFFER} fg=${_AISUG_GHOST_COLOR}")
     fi
-    [[ -n "$POSTDISPLAY" ]] \
-        && region_highlight=("$(( ${#BUFFER} )) $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=${_AISUG_GHOST_COLOR}") \
-        || region_highlight=()
 }
 
 _aisug_zle_restore_and_clear() {
-    (( _AISUG_ACTIVE )) && { BUFFER="$_AISUG_ORIGINAL_BUFFER"; CURSOR="$_AISUG_ORIGINAL_CURSOR"; }
-    _aisug_zle_clear_ghost; _aisug_reset_state
+    if (( _AISUG_ACTIVE )); then
+        BUFFER="$_AISUG_ORIGINAL_BUFFER"
+        CURSOR="$_AISUG_ORIGINAL_CURSOR"
+    fi
+    _aisug_zle_clear_ghost
+    _aisug_reset_state
+    zle -R
 }
 
 # ─── Core: Synchronous Query with Loading Indicator ──────────────────────────
@@ -230,7 +242,7 @@ _aisug_do_query() {
 
     # Show result (still in ZLE context — POSTDISPLAY is writable)
     if [[ -n "$suggestion" ]]; then
-        _aisug_zle_show_ghost "$suggestion" "$mode"
+        _aisug_zle_show_ghost "$suggestion"
     else
         _aisug_zle_clear_ghost
         _AISUG_ACTIVE=0
@@ -283,7 +295,7 @@ _aisug_accept_word() {
         CURSOR=${#BUFFER}
         [[ "$BUFFER" == "$suggestion" ]] \
             && { _aisug_zle_clear_ghost; _aisug_reset_state; } \
-            || { _aisug_zle_show_ghost "$suggestion" "complete"; zle -R; }
+            || { _aisug_zle_show_ghost "$suggestion"; zle -R; }
     else
         zle forward-word
     fi

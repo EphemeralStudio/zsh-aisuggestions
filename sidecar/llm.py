@@ -30,6 +30,11 @@ Rules:
 - Return ONLY the full suggested command. No explanation, no commentary, no markdown.
 - Return exactly one line. No newlines.
 - Satisfy the user's COMPLETE intent. Read the whole input before deciding what to suggest.
+- Pay attention to the cursor position. The cursor indicates where the user is actively \
+editing. If the user is typing a flag or argument in the middle of an existing command, \
+complete the token at the cursor while preserving the rest of the command. For example, \
+if the input is "git --clone https://...repo.git" with cursor right after "--", \
+suggest "git --recursive clone https://...repo.git" (completing the flag at the cursor).
 - Use context (cwd, project type, last error, exit code, git state) to infer intent.
 - If the last command failed (non-zero exit code), consider suggesting a fix or retry.
 - Prefer safe commands. Never suggest destructive commands (rm -rf /, DROP DATABASE, etc.) \
@@ -237,7 +242,9 @@ def build_user_prompt(request_data: Dict[str, Any]) -> str:
     if _looks_like_natural_language(buffer):
         parts.append(f"\nUser request (natural language — TRANSLATE to a command): {buffer}")
     else:
-        parts.append(f"\nCurrent input: {buffer}")
-    parts.append(f"Cursor position: {cursor_pos}")
+        # Show cursor position visually so the LLM knows where the user is editing
+        cursor_pos = min(cursor_pos, len(buffer))
+        annotated = buffer[:cursor_pos] + "▌" + buffer[cursor_pos:]
+        parts.append(f"\nCurrent input (▌ = cursor): {annotated}")
 
     return "\n".join(parts)
