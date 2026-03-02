@@ -1,0 +1,36 @@
+# ~/.config/zsh-aisuggestions/config.yaml
+#
+# zsh-aisuggestions configuration
+# All settings have sane defaults — only configure what you need to change.
+
+# ─── LLM API (OpenAI-compatible endpoint) ────────────────────────────────────
+# Any provider that speaks the OpenAI chat completions API works:
+#
+#   OpenAI:       https://api.openai.com/v1          model: gpt-4o-mini
+#   DeepSeek:     https://api.deepseek.com/v1        model: deepseek-chat
+#   Ollama:       http://localhost:11434/v1           model: codellama
+#   LM Studio:    http://localhost:1234/v1            model: local-model
+#   Groq:         https://api.groq.com/openai/v1     model: llama-3.1-8b-instant
+#   Together AI:  https://api.together.xyz/v1         model: meta-llama/Llama-3-8b-chat-hf
+
+api_base_url: https://api.openai.com/v1
+api_key_env: OPENAI_API_KEY      # Name of the env var containing your API key
+model: gpt-4o-mini
+
+# ─── Behavior ─────────────────────────────────────────────────────────────────
+debounce_ms: 300                 # ms to wait after last keystroke before triggering AI
+max_context_lines: 50            # max lines of scrollback to include in context
+max_history_commands: 10         # recent history commands to include
+cache_size: 200                  # max cached suggestions (in-memory LRU)
+cache_ttl_seconds: 300           # cache entry time-to-live
+request_timeout_seconds: 5       # max time to wait for LLM API response
+
+# ─── Display ──────────────────────────────────────────────────────────────────
+ghost_text_color: 8              # ANSI color code for ghost text (8 = gray/dim)
+
+# ─── Safety ───────────────────────────────────────────────────────────────────
+block_destructive: true          # Instruct LLM to avoid destructive commands
+max_tokens: 150                  # Max response tokens for suggestions
+
+# ─── Fallback ─────────────────────────────────────────────────────────────────
+local_history_fallback: true     # Show history match while waiting for AI
