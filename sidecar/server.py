@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 
 from .cache import SuggestionCache
 from .config import load_config
-from .context import enrich_context
+from .context import enrich_context, try_resolve_git_clone
 from .llm import LLMProvider, build_user_prompt
 
 logger = logging.getLogger("zsh-aisuggestions")
@@ -139,6 +139,22 @@ class SidecarServer:
         # Enrich context with server-side info
         context = request.get("context", {})
         context = enrich_context(context)
+
+        # Short-circuit: resolve "git clone <name>" to a real URL
+        resolved_clone = await asyncio.get_event_loop().run_in_executor(
+            None, try_resolve_git_clone, buffer, 3.0
+        )
+        if resolved_clone:
+            logger.debug("Resolved git clone: %s -> %s", buffer, resolved_clone)
+            self.cache.put(buffer, resolved_clone, cwd=context.get("cwd", ""),
+                           last_exit_code=context.get("last_exit_code", 0),
+                           git_branch=context.get("git_branch", ""))
+            return {
+                "suggestion": resolved_clone,
+                "mode": "rewrite",
+                "source": "github",
+                "cached": False,
+            }
 
         # Check cache
         cwd = context.get("cwd", "")

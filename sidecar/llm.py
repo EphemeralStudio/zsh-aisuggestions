@@ -35,7 +35,8 @@ Rules:
 - Prefer safe commands. Never suggest destructive commands (rm -rf /, DROP DATABASE, etc.) \
 unless the user's input clearly signals that intent.
 - If the input is ambiguous, prefer the most common usage.
-- The suggested command should be immediately executable — no placeholders like <file>."""
+- The suggested command should be immediately executable — no placeholders like <file>.
+- NEVER fabricate URLs, repository paths, or owner/org names you are not certain about."""
 
 
 class LLMProvider:
