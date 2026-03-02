@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>zsh-aisuggestions — AI-powered command suggestions for Zsh</title>
+  <meta name="description" content="LLM-powered command suggestions for Zsh. Translates natural language, fixes typos, and autocompletes — using any OpenAI-compatible API.">
+  <meta property="og:title" content="zsh-aisuggestions — AI-powered command suggestions for Zsh">
+  <meta property="og:description" content="LLM-powered command suggestions for Zsh. Translates natural language, fixes typos, and autocompletes — using any OpenAI-compatible API. BYOK, no telemetry.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ephemeralstudio.github.io/zsh-aisuggestions/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="zsh-aisuggestions">
+  <meta name="twitter:description" content="AI-powered command suggestions for Zsh. Any LLM provider. No telemetry.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Navigation
+     ════════════════════════════════════════════════════════════════════════ -->
+<nav class="nav">
+  <div class="container">
+    <a href="#" class="nav__logo">
+      <span class="nav__logo-icon">&#9889;</span>
+      zsh-aisuggestions
+    </a>
+    <button class="nav__toggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav__links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#demo">Demo</a></li>
+      <li><a href="#providers">Providers</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#keybindings">Keys</a></li>
+      <li><a href="https://github.com/EphemeralStudio/zsh-aisuggestions" class="button button--github">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Hero
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero__content">
+      <span class="hero__badge">Open Source &middot; MIT License</span>
+      <h1><span class="highlight">AI-powered</span> suggestions for your terminal.</h1>
+      <p class="hero__subtitle">
+        Type a partial command or describe what you want in plain English.
+        Press a hotkey. Get an intelligent suggestion — powered by any
+        OpenAI-compatible LLM. No subscription, no telemetry. You bring your own key.
+      </p>
+      <div class="hero__actions">
+        <a href="#install" class="button button--primary">Install now</a>
+        <a href="https://github.com/EphemeralStudio/zsh-aisuggestions" class="button button--outline">View on GitHub</a>
+      </div>
+    </div>
+    <div class="hero__terminal">
+      <div class="terminal hero-terminal-animated">
+        <div class="terminal__header">
+          <span class="terminal__dot terminal__dot--red"></span>
+          <span class="terminal__dot terminal__dot--yellow"></span>
+          <span class="terminal__dot terminal__dot--green"></span>
+          <span class="terminal__title">zsh</span>
+        </div>
+        <div class="terminal__body">
+          <div class="terminal__line">
+            <span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__command">list all running docker containers</span><span class="terminal__keylabel text-muted"></span>
+          </div>
+          <div class="terminal__line" style="margin-top: 6px;">
+            <span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__ghost">docker ps</span>
+          </div>
+          <div class="terminal__line" style="margin-top: 16px;">
+            <span class="terminal__comment"># Press Tab or Right Arrow to accept</span>
+          </div>
+          <div class="terminal__line" style="margin-top: 20px;">
+            <span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     About
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="about">
+  <div class="container">
+    <h2>What is zsh-aisuggestions?</h2>
+    <p>
+      A Zsh plugin that brings real AI understanding to your command line.
+      Instead of naive history prefix matching, it uses LLMs to translate natural language,
+      fix typos, complete arguments, and suggest context-aware commands based on your cwd,
+      git state, last error, and recent history.
+    </p>
+    <p>
+      All API calls go directly to your configured provider. No intermediary servers.
+      No data collection. No account required. Just your shell and your API key.
+    </p>
+    <div class="about__highlights">
+      <div class="about__stat">
+        <span class="about__stat-value">2</span>
+        <span class="about__stat-label">Suggestion modes</span>
+      </div>
+      <div class="about__stat">
+        <span class="about__stat-value">6+</span>
+        <span class="about__stat-label">LLM providers</span>
+      </div>
+      <div class="about__stat">
+        <span class="about__stat-value">0</span>
+        <span class="about__stat-label">Telemetry</span>
+      </div>
+      <div class="about__stat">
+        <span class="about__stat-value">MIT</span>
+        <span class="about__stat-label">License</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Features
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="features" id="features">
+  <div class="container">
+    <h2>Features</h2>
+    <p class="features__subtitle">Two modes, one goal — the right command, faster.</p>
+    <div class="features__grid">
+      <div class="feature-card">
+        <span class="feature-card__icon">&#9999;&#65039;</span>
+        <span class="feature-card__kbd">Ctrl+G</span>
+        <h3>Rewrite Mode</h3>
+        <p>
+          Full command replacement. Translates natural language descriptions to shell commands,
+          fixes typos, corrects flags, and rewrites based on context — last error, git state, cwd.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card__icon">&#9654;&#65039;</span>
+        <span class="feature-card__kbd">Ctrl+]</span>
+        <h3>Autocomplete Mode</h3>
+        <p>
+          Inline ghost text at the cursor. Completes the current token, flag, or argument
+          without replacing existing text. Like IDE autocomplete, but for the terminal.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card__icon">&#128268;</span>
+        <span class="feature-card__kbd">Any API</span>
+        <h3>Any LLM Provider</h3>
+        <p>
+          Works with any OpenAI-compatible endpoint: OpenAI, DeepSeek, Ollama, LM Studio,
+          Groq, Together AI, and more. No provider-specific SDKs needed.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card__icon">&#128024;</span>
+        <span class="feature-card__kbd">git clone</span>
+        <h3>Smart Git Clone</h3>
+        <p>
+          Type <code>git clone react</code> and press Ctrl+G. The plugin queries the GitHub API
+          to resolve the real repository URL — no LLM hallucination for repo paths.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card__icon">&#128202;</span>
+        <span class="feature-card__kbd">Context</span>
+        <h3>Context-Aware</h3>
+        <p>
+          Sends cwd, git branch, dirty status, last exit code, last command, OS, and recent
+          history to the LLM. Failed a build? It knows, and suggests accordingly.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-card__icon">&#128274;</span>
+        <span class="feature-card__kbd">Private</span>
+        <h3>Privacy-First</h3>
+        <p>
+          All API calls go directly to your provider. No intermediary servers, no analytics,
+          no telemetry, no account. Your data stays between you and your LLM.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Demo
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="demo" id="demo">
+  <div class="container">
+    <h2>See It in Action</h2>
+    <p class="demo__subtitle">A few examples of what zsh-aisuggestions can do.</p>
+
+    <div class="demo__examples">
+
+      <!-- Example 1: Natural language translation -->
+      <div class="demo__example">
+        <div class="demo__example-label">
+          <span class="demo__example-label-icon">&#128172;</span>
+          Translate natural language to a command
+        </div>
+        <div class="terminal">
+          <div class="terminal__header">
+            <span class="terminal__dot terminal__dot--red"></span>
+            <span class="terminal__dot terminal__dot--yellow"></span>
+            <span class="terminal__dot terminal__dot--green"></span>
+            <span class="terminal__title">zsh &mdash; rewrite mode</span>
+          </div>
+          <div class="terminal__body">
+            <div class="terminal__line"><span class="terminal__prompt">~/myproject $&nbsp;</span><span class="terminal__command">find all python files larger than 1MB</span></div>
+            <div class="terminal__line"><span class="terminal__comment"># press Ctrl+G ...</span></div>
+            <div class="terminal__line" style="margin-top: 4px;"><span class="terminal__prompt">~/myproject $&nbsp;</span><span class="terminal__ghost">find . -name "*.py" -size +1M</span></div>
+            <div class="terminal__line"><span class="terminal__comment"># press Tab to accept</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Example 2: Typo correction -->
+      <div class="demo__example">
+        <div class="demo__example-label">
+          <span class="demo__example-label-icon">&#128295;</span>
+          Fix typos and wrong flags
+        </div>
+        <div class="terminal">
+          <div class="terminal__header">
+            <span class="terminal__dot terminal__dot--red"></span>
+            <span class="terminal__dot terminal__dot--yellow"></span>
+            <span class="terminal__dot terminal__dot--green"></span>
+            <span class="terminal__title">zsh &mdash; rewrite mode</span>
+          </div>
+          <div class="terminal__body">
+            <div class="terminal__line"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__command">dockr bilud -t myapp .</span></div>
+            <div class="terminal__line"><span class="terminal__comment"># press Ctrl+G ...</span></div>
+            <div class="terminal__line" style="margin-top: 4px;"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__ghost">docker build -t myapp .</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Example 3: Context-aware suggestion -->
+      <div class="demo__example">
+        <div class="demo__example-label">
+          <span class="demo__example-label-icon">&#128161;</span>
+          Context-aware suggestion after an error
+        </div>
+        <div class="terminal">
+          <div class="terminal__header">
+            <span class="terminal__dot terminal__dot--red"></span>
+            <span class="terminal__dot terminal__dot--yellow"></span>
+            <span class="terminal__dot terminal__dot--green"></span>
+            <span class="terminal__title">zsh &mdash; rewrite mode</span>
+          </div>
+          <div class="terminal__body">
+            <div class="terminal__line"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__command">npm start</span></div>
+            <div class="terminal__line"><span style="color: #f7768e;">Error: listen EADDRINUSE: port 3000 already in use</span></div>
+            <div class="terminal__line" style="margin-top: 6px;"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__command">kill the process on port 3000</span></div>
+            <div class="terminal__line"><span class="terminal__comment"># press Ctrl+G ... AI reads the last error</span></div>
+            <div class="terminal__line" style="margin-top: 4px;"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__ghost">lsof -ti:3000 | xargs kill -9</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Example 4: Inline autocomplete -->
+      <div class="demo__example">
+        <div class="demo__example-label">
+          <span class="demo__example-label-icon">&#9000;&#65039;</span>
+          Inline autocomplete at cursor
+        </div>
+        <div class="terminal">
+          <div class="terminal__header">
+            <span class="terminal__dot terminal__dot--red"></span>
+            <span class="terminal__dot terminal__dot--yellow"></span>
+            <span class="terminal__dot terminal__dot--green"></span>
+            <span class="terminal__title">zsh &mdash; complete mode</span>
+          </div>
+          <div class="terminal__body">
+            <div class="terminal__line"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__command">docker run --rm -it -p 3000:30</span></div>
+            <div class="terminal__line"><span class="terminal__comment"># cursor at end, press Ctrl+] ...</span></div>
+            <div class="terminal__line" style="margin-top: 4px;"><span class="terminal__prompt">~ $&nbsp;</span><span class="terminal__command">docker run --rm -it -p 3000:3</span><span class="terminal__ghost">000</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Providers
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="providers" id="providers">
+  <div class="container">
+    <h2>Works With Any Provider</h2>
+    <p class="providers__subtitle">
+      Any OpenAI-compatible API endpoint. Cloud or local. Just set the URL and model.
+    </p>
+    <div class="providers__grid">
+      <div class="provider-card">
+        <span class="provider-card__icon">&#127775;</span>
+        <div class="provider-card__info">
+          <span class="provider-card__name">OpenAI</span>
+          <span class="provider-card__type">gpt-4o-mini</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <span class="provider-card__icon">&#128051;</span>
+        <div class="provider-card__info">
+          <span class="provider-card__name">DeepSeek</span>
+          <span class="provider-card__type">deepseek-chat</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <span class="provider-card__icon">&#9889;</span>
+        <div class="provider-card__info">
+          <span class="provider-card__name">Groq</span>
+          <span class="provider-card__type">llama-3.1-8b-instant</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <span class="provider-card__icon">&#129302;</span>
+        <div class="provider-card__info">
+          <span class="provider-card__name">Together AI</span>
+          <span class="provider-card__type">meta-llama/Llama-3</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <span class="provider-card__icon">&#128038;</span>
+        <div class="provider-card__info">
+          <span class="provider-card__name">Ollama</span>
+          <span class="provider-card__type">Local &middot; codellama</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <span class="provider-card__icon">&#128187;</span>
+        <div class="provider-card__info">
+          <span class="provider-card__name">LM Studio</span>
+          <span class="provider-card__type">Local &middot; any GGUF</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Install
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="install" id="install">
+  <div class="container">
+    <h2>Install zsh-aisuggestions</h2>
+    <p class="install__subtitle">Three steps. Under a minute.</p>
+
+    <div class="install__steps">
+
+      <div class="install__step">
+        <span class="install__step-number">1</span>
+        <div class="install__step-content">
+          <h4>Clone and run the installer</h4>
+          <div class="install__code">
+            <button class="install__code-copy">Copy</button>
+            <code>git clone https://github.com/EphemeralStudio/zsh-aisuggestions.git &amp;&amp; cd zsh-aisuggestions &amp;&amp; bash install.sh</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="install__step">
+        <span class="install__step-number">2</span>
+        <div class="install__step-content">
+          <h4>Add to your ~/.zshrc</h4>
+          <p>If using oh-my-zsh, add <code>zsh-aisuggestions</code> to your <code>plugins=(...)</code> list instead.</p>
+          <div class="install__code">
+            <button class="install__code-copy">Copy</button>
+            <code>source ~/.local/share/zsh-aisuggestions/zsh-aisuggestions.plugin.zsh</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="install__step">
+        <span class="install__step-number">3</span>
+        <div class="install__step-content">
+          <h4>Set your API key and restart</h4>
+          <p>Add your API key to <code>~/.zshrc</code> or <code>~/.zshenv</code>, then restart your shell.</p>
+          <div class="install__code">
+            <button class="install__code-copy">Copy</button>
+            <code>export OPENAI_API_KEY="sk-..."
+exec zsh</code>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Key Bindings
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="keybindings" id="keybindings">
+  <div class="container">
+    <h2>Key Bindings</h2>
+    <p class="keybindings__subtitle">Minimal, intentional shortcuts. Nothing auto-triggers.</p>
+    <table class="keybindings__table">
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><kbd>Ctrl</kbd> + <kbd>G</kbd></td>
+          <td>Rewrite mode &mdash; full command replacement, NL translation</td>
+        </tr>
+        <tr>
+          <td><kbd>Ctrl</kbd> + <kbd>]</kbd></td>
+          <td>Autocomplete mode &mdash; inline ghost text at cursor</td>
+        </tr>
+        <tr>
+          <td><kbd>Tab</kbd></td>
+          <td>Accept suggestion (or normal tab-complete if none)</td>
+        </tr>
+        <tr>
+          <td><kbd>Right Arrow</kbd></td>
+          <td>Accept suggestion</td>
+        </tr>
+        <tr>
+          <td><kbd>Backspace</kbd></td>
+          <td>Dismiss suggestion and restore original input</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Acknowledgments
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="acknowledgments">
+  <div class="container">
+    <hr class="acknowledgments__divider">
+    <h2>Standing on the Shoulders of Giants</h2>
+    <p>
+      This project is deeply inspired by
+      <a href="https://github.com/zsh-users/zsh-autosuggestions">zsh-autosuggestions</a>
+      and <a href="https://ohmyz.sh/">Oh My Zsh</a>.
+      Their pioneering work in making the terminal more intuitive and enjoyable has shaped
+      how an entire generation of developers interacts with the command line.
+      We are grateful for their lasting contributions to the open source community.
+    </p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Footer
+     ════════════════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer__left">
+      <span class="footer__brand">&#9889; zsh-aisuggestions</span>
+      <span class="footer__copy">&copy; 2026 EphemeralStudio &middot; MIT License</span>
+    </div>
+    <ul class="footer__links">
+      <li><a href="https://github.com/EphemeralStudio/zsh-aisuggestions">GitHub</a></li>
+      <li><a href="https://github.com/EphemeralStudio/zsh-aisuggestions/issues">Issues</a></li>
+      <li><a href="https://github.com/EphemeralStudio/zsh-aisuggestions/blob/main/LICENSE">License</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="js/script.js"></script>
+</body>
+</html>
