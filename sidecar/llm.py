@@ -10,17 +10,26 @@ from urllib.error import URLError, HTTPError
 logger = logging.getLogger("zsh-aisuggestions")
 
 SYSTEM_PROMPT = """\
-You are a terminal command suggestion engine. The user has typed a partial or complete \
-command in their terminal and is asking for your best suggestion. You may:
+You are a terminal command suggestion engine. The user is typing in their terminal \
+and pressing a hotkey to ask for your best command suggestion. Determine which mode \
+applies and respond accordingly:
 
-1. COMPLETE the command — extend what they've typed so far.
-2. REWRITE the command — replace their input entirely with a better command, \
-if context (last error, project state, git state) suggests they need something different.
-3. FIX the command — correct typos, wrong flags, or syntax errors in what they typed.
+1. TRANSLATE — The input is a natural-language description (e.g. "list all running \
+docker containers", "find large files over 100MB", "ps aux to get all proc ids of opencode"). \
+Convert the ENTIRE description into the single best shell command that fulfills the \
+complete request. Do NOT stop at the first verb — satisfy every part of the description. \
+For example "ps aux to get all proc ids of opencode" means: list processes, filter for \
+"opencode", and extract only the PIDs — so the answer must include awk/grep to extract PIDs, \
+not just "ps aux | grep opencode".
+2. COMPLETE — The input is already a valid partial command. Extend it to a useful completion.
+3. FIX — The input has typos, wrong flags, or syntax errors. Return the corrected command.
+4. REWRITE — Context (last error, exit code, project state) suggests the user needs a \
+different command entirely. Return that command.
 
 Rules:
 - Return ONLY the full suggested command. No explanation, no commentary, no markdown.
 - Return exactly one line. No newlines.
+- Satisfy the user's COMPLETE intent. Read the whole input before deciding what to suggest.
 - Use context (cwd, project type, last error, exit code, git state) to infer intent.
 - If the last command failed (non-zero exit code), consider suggesting a fix or retry.
 - Prefer safe commands. Never suggest destructive commands (rm -rf /, DROP DATABASE, etc.) \
@@ -157,6 +166,30 @@ class LLMProvider:
         return ""
 
 
+def _looks_like_natural_language(buffer: str) -> bool:
+    """Heuristic: does the input look like a natural language request rather than a command?"""
+    # Natural-language indicators: contains common English filler words that
+    # wouldn't appear in a real shell command, or is a long phrase with spaces
+    # and no shell operators.
+    words = buffer.strip().split()
+    if len(words) < 3:
+        return False
+    nl_markers = {
+        "to", "the", "all", "for", "from", "that", "with", "into",
+        "how", "what", "which", "where", "please", "show", "get",
+        "find", "list", "give", "make", "create", "delete", "remove",
+        "using", "of", "in", "on", "and", "or", "but", "is", "are",
+        "do", "does", "can", "every", "each",
+    }
+    lower_words = {w.lower() for w in words}
+    matches = lower_words & nl_markers
+    # If >=2 natural-language marker words, or >=1 with 4+ words, likely NL
+    has_shell_meta = any(c in buffer for c in "|;&<>$`()")
+    if has_shell_meta:
+        return False
+    return len(matches) >= 2 or (len(matches) >= 1 and len(words) >= 4)
+
+
 def build_user_prompt(request_data: Dict[str, Any]) -> str:
     """Build the user prompt from the request data and context."""
     buffer = request_data.get("buffer", "")
@@ -199,8 +232,11 @@ def build_user_prompt(request_data: Dict[str, Any]) -> str:
         history_str = "\n".join(f"  {cmd}" for cmd in recent_history[-10:])
         parts.append(f"Recent commands:\n{history_str}")
 
-    # Current input
-    parts.append(f"\nCurrent input: {buffer}")
+    # Current input — tag whether it looks like natural language
+    if _looks_like_natural_language(buffer):
+        parts.append(f"\nUser request (natural language — TRANSLATE to a command): {buffer}")
+    else:
+        parts.append(f"\nCurrent input: {buffer}")
     parts.append(f"Cursor position: {cursor_pos}")
 
     return "\n".join(parts)
