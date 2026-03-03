@@ -14,8 +14,17 @@
 #   Together AI:  https://api.together.xyz/v1         model: meta-llama/Llama-3-8b-chat-hf
 
 api_base_url: https://api.openai.com/v1
-api_key_env: OPENAI_API_KEY      # Name of the env var containing your API key
 model: gpt-4o-mini
+
+# API key — choose ONE of the two options below:
+#
+#   Option 1: Set the key directly in this file (convenient)
+# api_key: sk-your-api-key-here
+#
+#   Option 2: Reference an environment variable (more secure, recommended)
+#             Set the variable in your ~/.zshrc or ~/.zshenv:
+#               export OPENAI_API_KEY="sk-..."
+api_key_env: OPENAI_API_KEY
 
 # ─── Behavior ─────────────────────────────────────────────────────────────────
 debounce_ms: 300                 # ms to wait after last keystroke before triggering AI

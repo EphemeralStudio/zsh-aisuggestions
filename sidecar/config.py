@@ -125,11 +125,17 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     else:
         logger.info("No config file found, using defaults")
 
-    # Resolve API key from environment variable
-    api_key_env = config.get("api_key_env", "OPENAI_API_KEY")
-    config["api_key"] = os.environ.get(api_key_env, "")
-
-    if not config["api_key"]:
-        logger.warning("API key not found in env var '%s'. AI suggestions will not work.", api_key_env)
+    # Resolve API key: inline api_key takes precedence over env var
+    api_key = config.get("api_key", "")
+    if not api_key:
+        api_key_env = config.get("api_key_env", "OPENAI_API_KEY")
+        api_key = os.environ.get(api_key_env, "")
+        if not api_key:
+            logger.warning(
+                "API key not configured. Set 'api_key' in config.yaml "
+                "or export env var '%s'. AI suggestions will not work.",
+                api_key_env,
+            )
+    config["api_key"] = api_key
 
     return config

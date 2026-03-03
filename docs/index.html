@@ -358,21 +358,32 @@
         <span class="install__step-number">1</span>
         <div class="install__step-content">
           <h4>Run the installer</h4>
-          <p>Via <code>curl</code>:</p>
-          <div class="install__code">
-            <button class="install__code-copy">Copy</button>
-            <code>sh -c "$(curl -fsSL https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+          <div class="install__tabs">
+            <button class="install__tab install__tab--active" data-target="install-curl">curl</button>
+            <button class="install__tab" data-target="install-wget">wget</button>
+            <button class="install__tab" data-target="install-git">git</button>
           </div>
-          <p style="margin-top: 0.75rem;">Or via <code>wget</code>:</p>
-          <div class="install__code">
-            <button class="install__code-copy">Copy</button>
-            <code>sh -c "$(wget -qO- https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+          <div class="install__panels">
+            <div class="install__panel install__panel--active" id="install-curl">
+              <div class="install__code">
+                <button class="install__code-copy">Copy</button>
+                <code>sh -c "$(curl -fsSL https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+              </div>
+            </div>
+            <div class="install__panel" id="install-wget">
+              <div class="install__code">
+                <button class="install__code-copy">Copy</button>
+                <code>sh -c "$(wget -qO- https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+              </div>
+            </div>
+            <div class="install__panel" id="install-git">
+              <div class="install__code">
+                <button class="install__code-copy">Copy</button>
+                <code>git clone https://github.com/EphemeralStudio/zsh-aisuggestions.git &amp;&amp; cd zsh-aisuggestions &amp;&amp; bash install.sh</code>
+              </div>
+            </div>
           </div>
           <p style="margin-top: 0.75rem; opacity: 0.7;">
-            Alternatively, from a local clone:
-            <code style="display: block; margin-top: 0.25rem;">git clone https://github.com/EphemeralStudio/zsh-aisuggestions.git &amp;&amp; cd zsh-aisuggestions &amp;&amp; bash install.sh</code>
-          </p>
-          <p style="margin-top: 0.5rem; opacity: 0.7;">
             The installer automatically configures your <code>~/.zshrc</code> &mdash; no manual editing needed.
           </p>
         </div>
@@ -381,12 +392,32 @@
       <div class="install__step">
         <span class="install__step-number">2</span>
         <div class="install__step-content">
-          <h4>Set your API key and restart</h4>
-          <p>Add your API key to <code>~/.zshrc</code> or <code>~/.zshenv</code>, then restart your shell.</p>
+          <h4>Configure your LLM provider and restart</h4>
+          <p>Edit <code>~/.config/zsh-aisuggestions/config.yaml</code> to set your API endpoint and model:</p>
           <div class="install__code">
             <button class="install__code-copy">Copy</button>
-            <code>export OPENAI_API_KEY="sk-..."
-exec zsh</code>
+            <code>api_base_url: https://api.openai.com/v1
+model: gpt-4o-mini</code>
+          </div>
+          <p style="margin-top: 0.75rem;">Then set your API key using <strong>either</strong> option:</p>
+          <p style="margin-top: 0.5rem;"><strong>Option 1</strong> &mdash; Directly in the config file:</p>
+          <div class="install__code">
+            <button class="install__code-copy">Copy</button>
+            <code>api_key: sk-your-api-key-here</code>
+          </div>
+          <p style="margin-top: 0.5rem;"><strong>Option 2</strong> &mdash; Via environment variable <em>(recommended)</em>:</p>
+          <div class="install__code">
+            <button class="install__code-copy">Copy</button>
+            <code># In config.yaml:
+api_key_env: OPENAI_API_KEY
+
+# In ~/.zshrc or ~/.zshenv:
+export OPENAI_API_KEY="sk-..."</code>
+          </div>
+          <p style="margin-top: 0.75rem;">Then restart your shell:</p>
+          <div class="install__code">
+            <button class="install__code-copy">Copy</button>
+            <code>exec zsh</code>
           </div>
         </div>
       </div>

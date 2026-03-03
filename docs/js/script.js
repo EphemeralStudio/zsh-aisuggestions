@@ -51,6 +51,33 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  /* ─── Install method tab switching ─────────────────────────────────── */
+  document.querySelectorAll('.install__tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var targetId = tab.getAttribute('data-target');
+      if (!targetId) return;
+
+      /* Deactivate sibling tabs */
+      var tabGroup = tab.parentElement;
+      tabGroup.querySelectorAll('.install__tab').forEach(function (t) {
+        t.classList.remove('install__tab--active');
+      });
+      tab.classList.add('install__tab--active');
+
+      /* Show the matching panel, hide siblings */
+      var panelGroup = tabGroup.parentElement.querySelector('.install__panels');
+      if (panelGroup) {
+        panelGroup.querySelectorAll('.install__panel').forEach(function (p) {
+          p.classList.remove('install__panel--active');
+        });
+        var target = panelGroup.querySelector('#' + targetId);
+        if (target) {
+          target.classList.add('install__panel--active');
+        }
+      }
+    });
+  });
+
   /* ─── Scroll: shrink nav on scroll ───────────────────────────────────── */
   var nav = document.querySelector('.nav');
   if (nav) {
