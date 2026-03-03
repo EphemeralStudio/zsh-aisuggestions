@@ -18,19 +18,23 @@ logger = logging.getLogger("zsh-aisuggestions")
 
 
 def get_socket_path() -> str:
-    """Get the Unix socket path."""
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
-    if runtime_dir:
-        return os.path.join(runtime_dir, "zsh-aisuggestions.sock")
-    return f"/tmp/zsh-aisuggestions-{os.getuid()}.sock"
+    """Get the Unix socket path.
+
+    Must match the zsh plugin's naming convention:
+        ${XDG_RUNTIME_DIR:-/tmp}/zsh-aisuggestions-${UID}.sock
+    """
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+    return os.path.join(runtime_dir, f"zsh-aisuggestions-{os.getuid()}.sock")
 
 
 def get_pid_path() -> str:
-    """Get the PID file path."""
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
-    if runtime_dir:
-        return os.path.join(runtime_dir, "zsh-aisuggestions.pid")
-    return f"/tmp/zsh-aisuggestions-{os.getuid()}.pid"
+    """Get the PID file path.
+
+    Must match the zsh plugin's naming convention:
+        ${XDG_RUNTIME_DIR:-/tmp}/zsh-aisuggestions-${UID}.pid
+    """
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+    return os.path.join(runtime_dir, f"zsh-aisuggestions-{os.getuid()}.pid")
 
 
 class SidecarServer:
