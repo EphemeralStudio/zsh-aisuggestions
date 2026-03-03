@@ -28,7 +28,9 @@ different command entirely. Return that command.
 
 Rules:
 - Return ONLY the full suggested command. No explanation, no commentary, no markdown.
-- Return exactly one line. No newlines.
+- For simple commands, return a single line.
+- For multi-line constructs (for/while loops, if/else blocks, here-documents), use real \
+newlines with proper indentation. Keep it concise — no more than 10 lines.
 - Satisfy the user's COMPLETE intent. Read the whole input before deciding what to suggest.
 - Use context (cwd, project type, last error, exit code, git state) to infer intent.
 - If the last command failed (non-zero exit code), consider suggesting a fix or retry.
@@ -125,9 +127,10 @@ class LLMProvider:
         # they are valid shell characters needed in complete mode.
         while suggestion.startswith("`") and suggestion.endswith("`") and len(suggestion) > 1:
             suggestion = suggestion[1:-1].strip()
-        # Only return single-line suggestions
-        if "\n" in suggestion:
-            suggestion = suggestion.split("\n")[0].strip()
+        # Cap multi-line suggestions at 10 lines
+        lines = suggestion.split("\n")
+        if len(lines) > 10:
+            suggestion = "\n".join(lines[:10])
         return suggestion
 
     def _sync_stream_request(self, url: str, data: bytes, headers: dict) -> str:
