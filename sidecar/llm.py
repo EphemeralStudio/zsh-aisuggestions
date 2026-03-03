@@ -40,8 +40,7 @@ newlines with proper indentation. Keep it concise — no more than 10 lines.
 - Prefer safe commands. Never suggest destructive commands (rm -rf /, DROP DATABASE, etc.) \
 unless the user's input clearly signals that intent.
 - If the input is ambiguous, prefer the most common usage.
-- The suggested command should be immediately executable — no placeholders like <file>.
-- NEVER fabricate URLs, repository paths, or owner/org names you are not certain about."""
+- The suggested command should be immediately executable — no placeholders like <file>."""
 
 SYSTEM_PROMPT_COMPLETE = """\
 You are a terminal inline-completion engine. The user has an existing command in their \
@@ -60,8 +59,7 @@ NEVER wrap commands in "bash -c" or "sh -c", and NEVER suggest switching shells.
 - The result must be immediately executable — no placeholders.
 - If the cursor is after a partial flag like "--", complete it to a valid flag (e.g. "--recursive").
 - If the cursor is after a partial command/path, complete it appropriately.
-- If there is nothing useful to insert, return the input unchanged (without the cursor marker).
-- NEVER fabricate URLs, repository paths, or owner/org names you are not certain about."""
+- If there is nothing useful to insert, return the input unchanged (without the cursor marker)."""
 
 
 class LLMProvider:
