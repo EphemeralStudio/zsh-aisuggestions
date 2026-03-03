@@ -358,21 +358,32 @@
         <span class="install__step-number">1</span>
         <div class="install__step-content">
           <h4>Run the installer</h4>
-          <p>Via <code>curl</code>:</p>
-          <div class="install__code">
-            <button class="install__code-copy">Copy</button>
-            <code>sh -c "$(curl -fsSL https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+          <div class="install__tabs">
+            <button class="install__tab install__tab--active" data-target="install-curl">curl</button>
+            <button class="install__tab" data-target="install-wget">wget</button>
+            <button class="install__tab" data-target="install-git">git</button>
           </div>
-          <p style="margin-top: 0.75rem;">Or via <code>wget</code>:</p>
-          <div class="install__code">
-            <button class="install__code-copy">Copy</button>
-            <code>sh -c "$(wget -qO- https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+          <div class="install__panels">
+            <div class="install__panel install__panel--active" id="install-curl">
+              <div class="install__code">
+                <button class="install__code-copy">Copy</button>
+                <code>sh -c "$(curl -fsSL https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+              </div>
+            </div>
+            <div class="install__panel" id="install-wget">
+              <div class="install__code">
+                <button class="install__code-copy">Copy</button>
+                <code>sh -c "$(wget -qO- https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"</code>
+              </div>
+            </div>
+            <div class="install__panel" id="install-git">
+              <div class="install__code">
+                <button class="install__code-copy">Copy</button>
+                <code>git clone https://github.com/EphemeralStudio/zsh-aisuggestions.git &amp;&amp; cd zsh-aisuggestions &amp;&amp; bash install.sh</code>
+              </div>
+            </div>
           </div>
           <p style="margin-top: 0.75rem; opacity: 0.7;">
-            Alternatively, from a local clone:
-            <code style="display: block; margin-top: 0.25rem;">git clone https://github.com/EphemeralStudio/zsh-aisuggestions.git &amp;&amp; cd zsh-aisuggestions &amp;&amp; bash install.sh</code>
-          </p>
-          <p style="margin-top: 0.5rem; opacity: 0.7;">
             The installer automatically configures your <code>~/.zshrc</code> &mdash; no manual editing needed.
           </p>
         </div>

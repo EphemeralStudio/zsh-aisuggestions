@@ -698,6 +698,68 @@ code {
   color: var(--text-primary);
 }
 
+/* Install tabs — switchable curl / wget / git cards */
+.install__tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.install__tab {
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.install__tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.install__tab--active {
+  color: var(--accent);
+  background: var(--bg-terminal);
+  border-color: var(--border-color);
+  position: relative;
+}
+
+/* Hide the bottom border under the active tab to merge with the panel */
+.install__tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--bg-terminal);
+}
+
+.install__panels {
+  position: relative;
+}
+
+.install__panel {
+  display: none;
+}
+
+.install__panel--active {
+  display: block;
+}
+
+.install__panel .install__code {
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
 /* ─── Section: Keybindings ───────────────────────────────────────────────── */
 .keybindings {
   padding: var(--section-padding);
