@@ -379,6 +379,29 @@ _aisug_tab() {
 }
 zle -N _aisug_tab
 
+# ─── Redraw Hook ──────────────────────────────────────────────────────────────
+# zle clears region_highlight on every redraw cycle. We must re-apply it
+# while a ghost suggestion is being displayed; otherwise the highlight
+# "flashes" and disappears immediately after the triggering widget returns.
+
+_aisug_line_pre_redraw() {
+    (( _AISUG_ACTIVE )) || return
+
+    if [[ "$_AISUG_MODE" == "complete" && _AISUG_GHOST_LEN -gt 0 ]]; then
+        local ghost_end=$(( _AISUG_GHOST_START + _AISUG_GHOST_LEN ))
+        region_highlight=("${_AISUG_GHOST_START} ${ghost_end} fg=${_AISUG_GHOST_COLOR}")
+    elif [[ "$_AISUG_MODE" == "rewrite" ]]; then
+        if [[ -n "$POSTDISPLAY" ]]; then
+            # Extension mode — ghost is in POSTDISPLAY
+            region_highlight=("$(( ${#BUFFER} )) $(( ${#BUFFER} + ${#POSTDISPLAY} )) fg=${_AISUG_GHOST_COLOR}")
+        else
+            # Full replacement — entire BUFFER is ghost
+            region_highlight=("0 ${#BUFFER} fg=${_AISUG_GHOST_COLOR}")
+        fi
+    fi
+}
+zle -N zle-line-pre-redraw _aisug_line_pre_redraw
+
 # ─── Keybindings ──────────────────────────────────────────────────────────────
 
 bindkey '^G' _aisug_trigger_rewrite        # Ctrl+G — rewrite/translate
