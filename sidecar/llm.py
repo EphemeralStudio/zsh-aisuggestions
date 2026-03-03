@@ -28,6 +28,9 @@ different command entirely. Return that command.
 
 Rules:
 - Return ONLY the full suggested command. No explanation, no commentary, no markdown.
+- The user is running zsh. All suggestions MUST use zsh-compatible syntax. \
+NEVER wrap commands in "bash -c" or "sh -c", and NEVER suggest switching shells. \
+NEVER include shebangs (#!/bin/bash, #!/bin/sh). The command runs directly in the user's zsh.
 - For simple commands, return a single line.
 - For multi-line constructs (for/while loops, if/else blocks, here-documents), use real \
 newlines with proper indentation. Keep it concise — no more than 10 lines.
@@ -48,6 +51,8 @@ and after the cursor.
 
 Rules:
 - Return the FULL command line with your completion inserted at the cursor position.
+- The user is running zsh. All completions MUST use zsh-compatible syntax. \
+NEVER wrap commands in "bash -c" or "sh -c", and NEVER suggest switching shells.
 - Keep ALL text before the cursor exactly as-is.
 - Keep ALL text after the cursor exactly as-is.
 - Only insert new text at the cursor position to complete the current token/flag/argument.
