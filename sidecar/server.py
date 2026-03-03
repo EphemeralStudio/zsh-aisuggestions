@@ -4,10 +4,14 @@ import asyncio
 import json
 import logging
 import os
+import re
 import signal
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 from .cache import SuggestionCache
 from .config import load_config
@@ -15,6 +19,61 @@ from .context import enrich_context, try_resolve_git_clone
 from .llm import LLMProvider, build_user_prompt, SYSTEM_PROMPT_REWRITE, SYSTEM_PROMPT_COMPLETE
 
 logger = logging.getLogger("zsh-aisuggestions")
+
+_URL_RE = re.compile(r'https?://[^\s"\')\]}>]+')
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+def _head_check(url: str) -> bool:
+    """Perform a HEAD request. Returns True if 2xx/3xx, False otherwise."""
+    try:
+        req = Request(url, method="HEAD")
+        req.add_header("User-Agent", "zsh-aisuggestions/1.0")
+        with urlopen(req, timeout=2) as resp:
+            return resp.status < 400
+    except (HTTPError, URLError, OSError):
+        return False
+
+
+async def _validate_suggestion_urls(suggestion: str, original_buffer: str) -> bool:
+    """Validate that URLs in the suggestion are not fabricated.
+
+    Returns True if the suggestion is safe (no URLs, or all URLs valid).
+    Returns False if any LLM-generated URL is unreachable.
+    """
+    urls = _URL_RE.findall(suggestion)
+    if not urls:
+        return True
+
+    # Filter out URLs the user already provided, and localhost URLs
+    urls_to_check = []
+    for url in urls:
+        if url in original_buffer:
+            continue
+        try:
+            host = urlparse(url).hostname or ""
+            if host in _LOCAL_HOSTS:
+                continue
+        except Exception:
+            pass
+        urls_to_check.append(url)
+
+    if not urls_to_check:
+        return True
+
+    # Validate each URL with a HEAD request (run in thread pool)
+    loop = asyncio.get_event_loop()
+    for url in urls_to_check:
+        try:
+            valid = await asyncio.wait_for(
+                loop.run_in_executor(None, _head_check, url),
+                timeout=2.0,
+            )
+            if not valid:
+                return False
+        except (asyncio.TimeoutError, Exception):
+            return False
+    return True
 
 
 def get_socket_path() -> str:
@@ -200,6 +259,17 @@ class SidecarServer:
             return {"suggestion": "", "source": "error", "cached": False}
         finally:
             self._current_task = None
+
+        # Validate URLs in the suggestion (reject fabricated URLs)
+        if suggestion and not await _validate_suggestion_urls(suggestion, buffer):
+            logger.warning("Rejected suggestion with fabricated URL: %s",
+                           suggestion[:100])
+            return {
+                "suggestion": "\u26a0 sorry I don't know",
+                "mode": "rewrite",
+                "source": "llm",
+                "cached": False,
+            }
 
         if suggestion:
             # Cache the result
