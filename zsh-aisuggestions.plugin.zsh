@@ -266,14 +266,39 @@ _aisug_do_query() {
     local request=$(_aisug_build_request "$buffer" "$cursor" "$trigger_mode")
     local response=$(_aisug_query_socket "$request")
 
-    # Parse response — extract "suggestion" value
+    # Parse response — extract "suggestion" value (handles escaped quotes)
     local suggestion="" tmp
     if [[ -n "$response" && "$response" == *'"suggestion"'* ]]; then
         tmp="${response#*\"suggestion\"}"
         tmp="${tmp#*\"}"
-        suggestion="${tmp%%\"*}"
-        suggestion="${suggestion//\\\\/\\}"
-        suggestion="${suggestion//\\\"/\"}"
+        # Walk the string char-by-char to find the real closing "
+        # (the naive %%\"* approach breaks on escaped \" inside the value)
+        local _i=0 _ch
+        suggestion=""
+        while (( _i < ${#tmp} )); do
+            _ch="${tmp:_i:1}"
+            if [[ "$_ch" == '\' ]]; then
+                # Escaped character — peek at next char and unescape
+                (( _i++ ))
+                case "${tmp:_i:1}" in
+                    '"')  suggestion+='"' ;;
+                    '\') suggestion+='\' ;;
+                    'n')  suggestion+=$'\n' ;;
+                    't')  suggestion+=$'\t' ;;
+                    '/')  suggestion+='/' ;;
+                    *)    suggestion+="\\${tmp:_i:1}" ;;
+                esac
+            elif [[ "$_ch" == '"' ]]; then
+                break
+            else
+                suggestion+="$_ch"
+            fi
+            (( _i++ ))
+        done
+        # In complete mode, force single-line (multi-line only for rewrite)
+        if [[ "$trigger_mode" == "complete" ]]; then
+            suggestion="${suggestion%%$'\n'*}"
+        fi
     fi
 
     # Show result (still in ZLE context)
