@@ -1,14 +1,44 @@
 #!/usr/bin/env bash
 # install.sh — Install zsh-aisuggestions
+#
+# This script can be run via curl:
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"
+# or via wget:
+#   sh -c "$(wget -qO- https://raw.githubusercontent.com/EphemeralStudio/zsh-aisuggestions/main/install.sh)"
+# or from a local clone:
+#   git clone https://github.com/EphemeralStudio/zsh-aisuggestions.git
+#   cd zsh-aisuggestions && bash install.sh
 set -euo pipefail
 
 INSTALL_DIR="${HOME}/.local/share/zsh-aisuggestions"
 CONFIG_DIR="${HOME}/.config/zsh-aisuggestions"
 VENV_DIR="${INSTALL_DIR}/venv"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd 2>/dev/null || echo "")"
+
+# ─── Remote mode: download source if not running from a local clone ───────
+if [[ -z "$SCRIPT_DIR" || ! -f "$SCRIPT_DIR/zsh-aisuggestions.plugin.zsh" ]]; then
+    TMPDIR_DL="$(mktemp -d)"
+    trap 'rm -rf "$TMPDIR_DL"' EXIT
+    REPO_URL="https://github.com/EphemeralStudio/zsh-aisuggestions/archive/refs/heads/main.tar.gz"
+    echo "[..] Downloading zsh-aisuggestions..."
+    if command -v curl &>/dev/null; then
+        curl -fsSL "$REPO_URL" | tar -xz -C "$TMPDIR_DL"
+    elif command -v wget &>/dev/null; then
+        wget -qO- "$REPO_URL" | tar -xz -C "$TMPDIR_DL"
+    else
+        echo "[ERROR] curl or wget is required for remote install."
+        exit 1
+    fi
+    SCRIPT_DIR="$TMPDIR_DL/zsh-aisuggestions-main"
+    if [[ ! -f "$SCRIPT_DIR/zsh-aisuggestions.plugin.zsh" ]]; then
+        echo "[ERROR] Download failed or archive structure unexpected."
+        exit 1
+    fi
+    echo "[OK] Downloaded"
+fi
 
 echo "╔══════════════════════════════════════════╗"
-echo "║   zsh-aisuggestions installer             ║"
+echo "║   zsh-aisuggestions installer            ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -66,8 +96,12 @@ else
     echo "[OK] Config already exists at ${CONFIG_DIR}/config.yaml"
 fi
 
-# ─── oh-my-zsh integration ────────────────────────────────────────────────
+# ─── Shell integration ────────────────────────────────────────────────────
+ZSHRC="${HOME}/.zshrc"
+PLUGIN_ACTIVATED=0
+
 if [[ -n "${ZSH_CUSTOM:-}" || -d "${HOME}/.oh-my-zsh" ]]; then
+    # ── oh-my-zsh: symlink + auto-inject into plugins=(...) ───────────
     ZSH_CUSTOM="${ZSH_CUSTOM:-${HOME}/.oh-my-zsh/custom}"
     OMZ_PLUGIN_DIR="${ZSH_CUSTOM}/plugins/zsh-aisuggestions"
     echo ""
@@ -76,33 +110,56 @@ if [[ -n "${ZSH_CUSTOM:-}" || -d "${HOME}/.oh-my-zsh" ]]; then
         mkdir -p "$(dirname "$OMZ_PLUGIN_DIR")"
         ln -sf "$INSTALL_DIR" "$OMZ_PLUGIN_DIR"
         echo "[OK] Symlinked to ${OMZ_PLUGIN_DIR}"
-        echo "     Add 'zsh-aisuggestions' to your plugins=(...) in .zshrc"
     else
         echo "[OK] oh-my-zsh plugin dir already exists"
     fi
+
+    # Auto-add zsh-aisuggestions to the plugins=(...) list in .zshrc
+    if [[ -f "$ZSHRC" ]]; then
+        if grep -q 'plugins=.*zsh-aisuggestions' "$ZSHRC" 2>/dev/null; then
+            echo "[OK] 'zsh-aisuggestions' already in plugins=(...)"
+        elif grep -q '^plugins=(' "$ZSHRC" 2>/dev/null; then
+            # Insert zsh-aisuggestions before the closing paren
+            sed -i 's/^plugins=(\(.*\))/plugins=(\1 zsh-aisuggestions)/' "$ZSHRC"
+            # Clean up double spaces that may result from empty plugins=()
+            sed -i 's/^plugins=( /plugins=(/' "$ZSHRC"
+            echo "[OK] Added 'zsh-aisuggestions' to plugins=(...) in ${ZSHRC}"
+        else
+            echo "[WARN] Could not find plugins=(...) in ${ZSHRC}"
+            echo "       Please add 'zsh-aisuggestions' to your plugins list manually"
+        fi
+    fi
+    PLUGIN_ACTIVATED=1
+else
+    # ── Non-oh-my-zsh: auto-append source line to .zshrc ─────────────
+    SOURCE_LINE="source ${INSTALL_DIR}/zsh-aisuggestions.plugin.zsh"
+    if [[ -f "$ZSHRC" ]] && grep -qF "zsh-aisuggestions.plugin.zsh" "$ZSHRC" 2>/dev/null; then
+        echo "[OK] source line already present in ${ZSHRC}"
+    else
+        echo "" >> "$ZSHRC"
+        echo "# zsh-aisuggestions — LLM-powered autosuggestions" >> "$ZSHRC"
+        echo "$SOURCE_LINE" >> "$ZSHRC"
+        echo "[OK] Added source line to ${ZSHRC}"
+    fi
+    PLUGIN_ACTIVATED=1
 fi
 
 # ─── Done ──────────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Installation complete!                                     ║"
+echo "║  Installation complete!                                      ║"
 echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║                                                            ║"
-echo "║  Add this to your ~/.zshrc:                                ║"
-echo "║                                                            ║"
-echo "║    source ${INSTALL_DIR}/zsh-aisuggestions.plugin.zsh"
-echo "║                                                            ║"
-echo "║  Set your API key:                                         ║"
-echo "║                                                            ║"
+echo "║                                                              ║"
+echo "║  Set your API key (if not already set):                      ║"
+echo "║                                                              ║"
 echo "║    export OPENAI_API_KEY=\"sk-...\"                          ║"
-echo "║                                                            ║"
-echo "║  Then restart your shell or run: exec zsh                  ║"
-echo "║                                                            ║"
-echo "║  Keybindings:                                              ║"
-echo "║    Ctrl+G     → Force AI suggestion                       ║"
-echo "║    Right Arrow → Accept suggestion                        ║"
-echo "║    Tab        → Accept suggestion (or tab-complete)        ║"
-echo "║    Ctrl+Right → Accept next word                          ║"
-echo "║    Esc        → Dismiss suggestion                        ║"
-echo "║                                                            ║"
+echo "║                                                              ║"
+echo "║  Then restart your shell or run: exec zsh                    ║"
+echo "║                                                              ║"
+echo "║  Keybindings:                                                ║"
+echo "║    Ctrl+G      → AI rewrite (translate / fix / complete)     ║"
+echo "║    Ctrl+]      → AI inline autocomplete at cursor            ║"
+echo "║    Tab / →     → Accept suggestion                           ║"
+echo "║    Backspace   → Dismiss suggestion                          ║"
+echo "║                                                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
